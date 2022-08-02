@@ -25,6 +25,10 @@
 
 #include <linux/videodev2.h>
 
+#include <apriltag/apriltag.h>
+#include <apriltag/tagStandard41h12.h>
+#include <time.h>
+
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
 enum io_method {
@@ -44,8 +48,11 @@ static int              fd = -1;
 struct buffer          *buffers;
 static unsigned int     n_buffers;
 static int              out_buf;
-static int              force_format;
+static int              force_format = 0;
 static int              frame_count = 70;
+
+apriltag_detector_t *td;
+apriltag_family_t *tf;
 
 static void errno_exit(const char *s)
 {
@@ -69,9 +76,25 @@ static void process_image(const void *p, int size)
     if (out_buf)
 	    fwrite(p, size, 1, stdout);
 
-    fflush(stderr);
-    fprintf(stderr, ".");
-    fflush(stdout);
+    //fflush(stderr);
+    //fprintf(stderr, ".");
+    //fflush(stderr);
+    //printf("%d\n", size);
+
+#if 1
+    image_u8_t img_header = { .width=1280, .height=720, .stride=1280, .buf=p };
+    clock_t begin = clock();
+    zarray_t *detections = apriltag_detector_detect(td, &img_header);
+    clock_t end = clock();
+    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
+    for (int i = 0; i < zarray_size(detections); i++) {
+       apriltag_detection_t *det;
+       zarray_get(detections, i, &det);
+
+       // Do stuff with detections here.
+       printf("got one\n");
+    }
+#endif
 }
 
 static int read_frame(void)
@@ -409,6 +432,24 @@ static void init_userp(unsigned int buffer_size)
     }
 }
 
+void print_v4l2_fourcc(unsigned int fourcc)
+{
+	char buf[5];
+	buf[0] = fourcc & 0x7f;
+	buf[1] = (fourcc >> 8) & 0x7f;
+	buf[2] = (fourcc >> 16) & 0x7f;
+	buf[3] = (fourcc >> 24) & 0x7f;
+	if (fourcc & (1 << 31)) {
+		buf[4] = '-';
+		buf[5] = 'B';
+		buf[6] = 'E';
+		buf[7] = '\0';
+	} else {
+		buf[4] = '\0';
+	}
+	printf("%s\n", buf);
+}
+
 static void init_device(void)
 {
     struct v4l2_capability cap;
@@ -483,10 +524,10 @@ static void init_device(void)
 
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (force_format) {
-	    fmt.fmt.pix.width       = 640;
-	    fmt.fmt.pix.height      = 480;
-	    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
-	    fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED;
+	    fmt.fmt.pix.width       = 1280;
+	    fmt.fmt.pix.height      = 720;
+	    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;
+	    fmt.fmt.pix.field       = V4L2_FIELD_NONE;
 
 	    if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
 		    errno_exit("VIDIOC_S_FMT");
@@ -496,6 +537,13 @@ static void init_device(void)
 	    /* Preserve original settings as set by v4l2-ctl for example */
 	    if (-1 == xioctl(fd, VIDIOC_G_FMT, &fmt))
 		    errno_exit("VIDIOC_G_FMT");
+    }
+
+    CLEAR(fmt);
+    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+    if (xioctl(fd, VIDIOC_G_FMT, &fmt) == 0) {
+        printf("fmt %d %d\n", fmt.fmt.pix.width, fmt.fmt.pix.height);
+	print_v4l2_fourcc(fmt.fmt.pix.pixelformat);
     }
 
     /* Buggy driver paranoia. */
@@ -588,6 +636,10 @@ long_options[] = {
 
 int main(int argc, char **argv)
 {
+    td = apriltag_detector_create();
+    tf = tagStandard41h12_create();
+    apriltag_detector_add_family(td, tf);
+
     dev_name = "/dev/video0";
 
     for (;;) {
@@ -629,7 +681,7 @@ int main(int argc, char **argv)
 		    break;
 
 	    case 'f':
-		    force_format++;
+		    force_format = 1;
 		    break;
 
 	    case 'c':
@@ -652,6 +704,8 @@ int main(int argc, char **argv)
     stop_capturing();
     uninit_device();
     close_device();
-    fprintf(stderr, "\\n");
+    tagStandard41h12_destroy(tf);
+    apriltag_detector_destroy(td);
+    fprintf(stderr, "\n");
     return 0;
 }
