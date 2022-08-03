@@ -33,6 +33,9 @@
 #include <apriltag/tagStandard41h12.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
 
 #define CAM_RES_W 1280
 #define CAM_RES_H 720
@@ -63,7 +66,8 @@ apriltag_detector_t *td;
 apriltag_family_t *tf;
 apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
 
-int fifo_fd;
+int ipc_fd;
+struct sockaddr_in server;
 
 bool gogogo = true;
 
@@ -112,8 +116,8 @@ static void process_image(const void *p, int size)
         if (det->id == 0) {
             det_info.det = det;
             estimate_tag_pose(&det_info, &pose);
-            printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
-            write(fifo_fd, pose.t->data, sizeof(double)*3);
+            //printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+            sendto(ipc_fd, pose.t->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
         }
     }
     //clock_t end = clock();
@@ -656,16 +660,25 @@ long_options[] = {
 
 int main(int argc, char **argv)
 {
-    fifo_fd = open("/home/pi/tag_pose", O_WRONLY);
-
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
+
+    system("v4l2-ctl -p 10");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
     td->quad_decimate = 4;
     td->nthreads = 2;
+
+    if ((ipc_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+        return 1;
+    }
+    memset(&server, 0, sizeof(server));
+    /* Set up the server name */
+    server.sin_family      = AF_INET;            /* Internet Domain    */
+    server.sin_port        = htons(17510);  //Server Port
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     dev_name = "/dev/video0";
 
@@ -733,7 +746,7 @@ int main(int argc, char **argv)
     close_device();
     tagStandard41h12_destroy(tf);
     apriltag_detector_destroy(td);
-    close(fifo_fd);
+    close(ipc_fd);
     fprintf(stderr, "\n");
     return 0;
 }
