@@ -22,6 +22,9 @@
 #include <sys/time.h>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #include <linux/videodev2.h>
 
@@ -29,6 +32,7 @@
 #include <apriltag/apriltag_pose.h>
 #include <apriltag/tagStandard41h12.h>
 #include <time.h>
+#include <signal.h>
 
 #define CAM_RES_W 1280
 #define CAM_RES_H 720
@@ -59,6 +63,14 @@ apriltag_detector_t *td;
 apriltag_family_t *tf;
 apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
 
+int fifo_fd;
+
+bool gogogo = true;
+
+void sig_handler(int signum) {
+    gogogo = false;
+}
+
 static void errno_exit(const char *s)
 {
     fprintf(stderr, "%s error %d, %s\\n", s, errno, strerror(errno));
@@ -78,7 +90,7 @@ static int xioctl(int fh, int request, void *arg)
 
 static void process_image(const void *p, int size)
 {
-    if (out_buf) fwrite(p, size, 1, stdout);
+    //if (out_buf) fwrite(p, size, 1, stdout);
 
     //fflush(stderr);
     //fprintf(stderr, ".");
@@ -88,22 +100,24 @@ static void process_image(const void *p, int size)
 #if 1
     image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
     apriltag_pose_t pose;
-    clock_t begin = clock();
+    //clock_t begin = clock();
     zarray_t *detections = apriltag_detector_detect(td, &img_header);
     //clock_t end = clock();
     //printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
     for (int i = 0; i < zarray_size(detections); i++) {
-       apriltag_detection_t *det;
-       zarray_get(detections, i, &det);
+        apriltag_detection_t *det;
+        zarray_get(detections, i, &det);
 
-       // Do stuff with detections here.
-       //printf("got one\n");
-       det_info.det = det;
-       estimate_tag_pose(&det_info, &pose);
-       printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+        // Do stuff with detections here.
+        if (det->id == 0) {
+            det_info.det = det;
+            estimate_tag_pose(&det_info, &pose);
+            printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+            write(fifo_fd, pose.t->data, sizeof(double)*3);
+        }
     }
-    clock_t end = clock();
-    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
+    //clock_t end = clock();
+    //printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
 #endif
 }
 
@@ -201,11 +215,7 @@ static int read_frame(void)
 
 static void mainloop(void)
 {
-    unsigned int count;
-
-    count = frame_count;
-
-    while (count-- > 0) {
+    while (gogogo) {
 	    for (;;) {
 		    fd_set fds;
 		    struct timeval tv;
@@ -646,6 +656,11 @@ long_options[] = {
 
 int main(int argc, char **argv)
 {
+    fifo_fd = open("/home/pi/tag_pose", O_WRONLY);
+
+    signal(SIGINT, sig_handler);
+    signal(SIGTERM, sig_handler);
+
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
@@ -718,6 +733,7 @@ int main(int argc, char **argv)
     close_device();
     tagStandard41h12_destroy(tf);
     apriltag_detector_destroy(td);
+    close(fifo_fd);
     fprintf(stderr, "\n");
     return 0;
 }
