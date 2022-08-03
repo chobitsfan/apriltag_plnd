@@ -26,8 +26,12 @@
 #include <linux/videodev2.h>
 
 #include <apriltag/apriltag.h>
+#include <apriltag/apriltag_pose.h>
 #include <apriltag/tagStandard41h12.h>
 #include <time.h>
+
+#define CAM_RES_W 1280
+#define CAM_RES_H 720
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
@@ -48,11 +52,12 @@ static int              fd = -1;
 struct buffer          *buffers;
 static unsigned int     n_buffers;
 static int              out_buf;
-static int              force_format = 0;
+static int              force_format = 1;
 static int              frame_count = 70;
 
 apriltag_detector_t *td;
 apriltag_family_t *tf;
+apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
 
 static void errno_exit(const char *s)
 {
@@ -73,8 +78,7 @@ static int xioctl(int fh, int request, void *arg)
 
 static void process_image(const void *p, int size)
 {
-    if (out_buf)
-	    fwrite(p, size, 1, stdout);
+    if (out_buf) fwrite(p, size, 1, stdout);
 
     //fflush(stderr);
     //fprintf(stderr, ".");
@@ -82,18 +86,24 @@ static void process_image(const void *p, int size)
     //printf("%d\n", size);
 
 #if 1
-    image_u8_t img_header = { .width=1280, .height=720, .stride=1280, .buf=p };
+    image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
+    apriltag_pose_t pose;
     clock_t begin = clock();
     zarray_t *detections = apriltag_detector_detect(td, &img_header);
-    clock_t end = clock();
-    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
+    //clock_t end = clock();
+    //printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
     for (int i = 0; i < zarray_size(detections); i++) {
        apriltag_detection_t *det;
        zarray_get(detections, i, &det);
 
        // Do stuff with detections here.
-       printf("got one\n");
+       //printf("got one\n");
+       det_info.det = det;
+       estimate_tag_pose(&det_info, &pose);
+       printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
     }
+    clock_t end = clock();
+    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
 #endif
 }
 
@@ -524,8 +534,8 @@ static void init_device(void)
 
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (force_format) {
-	    fmt.fmt.pix.width       = 1280;
-	    fmt.fmt.pix.height      = 720;
+	    fmt.fmt.pix.width       = CAM_RES_W;
+	    fmt.fmt.pix.height      = CAM_RES_H;
 	    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;
 	    fmt.fmt.pix.field       = V4L2_FIELD_NONE;
 
@@ -639,6 +649,8 @@ int main(int argc, char **argv)
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
+    td->quad_decimate = 4;
+    td->nthreads = 2;
 
     dev_name = "/dev/video0";
 
