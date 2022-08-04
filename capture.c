@@ -42,6 +42,8 @@
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
+#define SPEED_TEST 0
+
 enum io_method {
     IO_METHOD_READ,
     IO_METHOD_MMAP,
@@ -101,10 +103,11 @@ static void process_image(const void *p, int size)
     //fflush(stderr);
     //printf("%d\n", size);
 
-#if 1
     image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
     apriltag_pose_t pose;
-    //clock_t begin = clock();
+#if SPEED_TEST
+    clock_t begin = clock();
+#endif
     zarray_t *detections = apriltag_detector_detect(td, &img_header);
     //clock_t end = clock();
     //printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
@@ -120,8 +123,9 @@ static void process_image(const void *p, int size)
             sendto(ipc_fd, pose.t->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
         }
     }
-    //clock_t end = clock();
-    //printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
+#if SPEED_TEST
+    clock_t end = clock();
+    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
 #endif
 }
 
@@ -663,13 +667,13 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    system("v4l2-ctl -p 10");
+    system("v4l2-ctl -p 8");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
     td->quad_decimate = 4;
-    td->nthreads = 2;
+    td->nthreads = 3;
 
     if ((ipc_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         return 1;
