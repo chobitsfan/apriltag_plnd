@@ -67,6 +67,7 @@ static int              frame_count = 70;
 apriltag_detector_t *td;
 apriltag_family_t *tf;
 apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
+matd_t* tgt_offset;
 
 int ipc_fd;
 struct sockaddr_in server;
@@ -118,15 +119,53 @@ static void process_image(const void *p, int size)
         // Do stuff with detections here.
         if (det->id == 0) {
             det_info.det = det;
+            det_info.tagsize = 0.113;
             estimate_tag_pose(&det_info, &pose);
+	#if SPEED_TEST
+	    clock_t end = clock();
+	    printf("%f tag0 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+	#endif
+            tgt_offset->data[0]=0.1;
+            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+            matd_t* m2 = matd_add(m1, pose.t);
+            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            matd_destroy(m1);
+            matd_destroy(m2);
+            matd_destroy(pose.t);
+            matd_destroy(pose.R);
+            break;
+        } else if (det->id == 1) {
+            det_info.det = det;
+            det_info.tagsize = 0.041;
+            estimate_tag_pose(&det_info, &pose);
+	#if SPEED_TEST
+	    clock_t end = clock();
+	    printf("%f tag1 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+	#endif
+            tgt_offset->data[0]=-0.1;
+            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+            matd_t* m2 = matd_add(m1, pose.t);
+            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            matd_destroy(m1);
+            matd_destroy(m2);
+            matd_destroy(pose.t);
+            matd_destroy(pose.R);
+            break;
+#if 0
+        } else if (det->id == 2) {
+            det_info.det = det;
+            det_info.tagsize = 0.077;
+            estimate_tag_pose(&det_info, &pose);
+            pose.t->data[0]-0.2;
             //printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
             sendto(ipc_fd, pose.t->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            matd_destroy(pose.t);
+            matd_destroy(pose.R);
+            break;
+#endif
         }
     }
-#if SPEED_TEST
-    clock_t end = clock();
-    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
-#endif
+    apriltag_detections_destroy(detections);
 }
 
 static int read_frame(void)
@@ -155,7 +194,7 @@ static int read_frame(void)
 	    break;
 
     case IO_METHOD_MMAP:
-	    CLEAR(buf);
+	    //CLEAR(buf);
 
 	    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	    buf.memory = V4L2_MEMORY_MMAP;
@@ -224,35 +263,32 @@ static int read_frame(void)
 static void mainloop(void)
 {
     while (gogogo) {
-	    for (;;) {
-		    fd_set fds;
-		    struct timeval tv;
-		    int r;
+	    fd_set fds;
+	    struct timeval tv;
+	    int r;
 
-		    FD_ZERO(&fds);
-		    FD_SET(fd, &fds);
+	    FD_ZERO(&fds);
+	    FD_SET(fd, &fds);
 
-		    /* Timeout. */
-		    tv.tv_sec = 2;
-		    tv.tv_usec = 0;
+	    /* Timeout. */
+	    tv.tv_sec = 2;
+	    tv.tv_usec = 0;
 
-		    r = select(fd + 1, &fds, NULL, NULL, &tv);
+	    r = select(fd + 1, &fds, NULL, NULL, &tv);
 
-		    if (-1 == r) {
-			    if (EINTR == errno)
-				    continue;
-			    errno_exit("select");
-		    }
-
-		    if (0 == r) {
-			    fprintf(stderr, "select timeout\\n");
-			    exit(EXIT_FAILURE);
-		    }
-
-		    if (read_frame())
-			    break;
-		    /* EAGAIN - continue select loop. */
+	    if (-1 == r) {
+		    if (EINTR == errno)
+			    continue;
+		    errno_exit("select");
 	    }
+
+	    if (0 == r) {
+		    fprintf(stderr, "select timeout\\n");
+		    exit(EXIT_FAILURE);
+	    }
+
+	    read_frame();
+	    /* EAGAIN - continue select loop. */
     }
 }
 
@@ -667,13 +703,17 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    system("v4l2-ctl -p 8");
+    system("v4l2-ctl -p 10");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
     td->quad_decimate = 4;
-    td->nthreads = 3;
+    td->nthreads = 4;
+    tgt_offset = matd_create(3, 1);
+    tgt_offset->data[0]=0;
+    tgt_offset->data[1]=0;
+    tgt_offset->data[2]=0;
 
     if ((ipc_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
         return 1;
@@ -750,6 +790,7 @@ int main(int argc, char **argv)
     close_device();
     tagStandard41h12_destroy(tf);
     apriltag_detector_destroy(td);
+    matd_destroy(tgt_offset);
     close(ipc_fd);
     fprintf(stderr, "\n");
     return 0;
