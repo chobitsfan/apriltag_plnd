@@ -95,7 +95,7 @@ static int xioctl(int fh, int request, void *arg)
     return r;
 }
 
-static void process_image(const void *p, int size)
+static void process_image(void *p, int size)
 {
     //if (out_buf) fwrite(p, size, 1, stdout);
 
@@ -170,7 +170,7 @@ static void process_image(const void *p, int size)
 
 static int read_frame(void)
 {
-    struct v4l2_buffer buf;
+    struct v4l2_buffer buf, buf2;
     unsigned int i;
 
     switch (io) {
@@ -194,7 +194,7 @@ static int read_frame(void)
 	    break;
 
     case IO_METHOD_MMAP:
-	    //CLEAR(buf);
+	    CLEAR(buf);
 
 	    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	    buf.memory = V4L2_MEMORY_MMAP;
@@ -214,12 +214,27 @@ static int read_frame(void)
 		    }
 	    }
 
-	    assert(buf.index < n_buffers);
+            //https://lightbits.github.io/v4l2_real_time/
+            //Dequeue all the buffers before we start processing, pick the latest one, and place everyone else back on the queue
+	    CLEAR(buf2);
+	    buf2.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	    buf2.memory = V4L2_MEMORY_MMAP;
+	    if (-1 == xioctl(fd, VIDIOC_DQBUF, &buf2)) {
+            	if (errno == EAGAIN) {
+	            assert(buf.index < n_buffers);
+	    	    process_image(buffers[buf.index].start, buf.bytesused);
+	            if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) errno_exit("VIDIOC_QBUF");
+                    return 0;
+                } else {
+		    errno_exit("VIDIOC_DQBUF");
+                }
+            }
 
-	    process_image(buffers[buf.index].start, buf.bytesused);
+	    if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) errno_exit("VIDIOC_QBUF");
+	    assert(buf2.index < n_buffers);
+	    process_image(buffers[buf2.index].start, buf2.bytesused);
 
-	    if (-1 == xioctl(fd, VIDIOC_QBUF, &buf))
-		    errno_exit("VIDIOC_QBUF");
+	    if (-1 == xioctl(fd, VIDIOC_QBUF, &buf2)) errno_exit("VIDIOC_QBUF");
 	    break;
 
     case IO_METHOD_USERPTR:
@@ -406,7 +421,7 @@ static void init_mmap(void)
 
     CLEAR(req);
 
-    req.count = 4;
+    req.count = 3;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_MMAP;
 
