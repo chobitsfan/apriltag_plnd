@@ -165,6 +165,12 @@ static void process_image(void *p, int size)
 #endif
         }
     }
+    #if SPEED_TEST
+    if (zarray_size(detections) == 0) {
+	    clock_t end = clock();
+	    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
+    }
+    #endif
     apriltag_detections_destroy(detections);
 }
 
@@ -718,7 +724,7 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    system("v4l2-ctl -p 10");
+    //system("v4l2-ctl -p 10");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();

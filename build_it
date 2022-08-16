@@ -1,1 +1,1 @@
-gcc -Wall -lm -lapriltag -O -o apriltag_plnd capture.c
+gcc -O1 -Wall -o apriltag_plnd capture.c -lapriltag -lm
