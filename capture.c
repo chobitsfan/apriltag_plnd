@@ -119,13 +119,14 @@ static void process_image(void *p, int size)
         // Do stuff with detections here.
         if (det->id == 0) {
             det_info.det = det;
-            det_info.tagsize = 0.113;
+            det_info.tagsize = 0.16;
             estimate_tag_pose(&det_info, &pose);
 	#if SPEED_TEST
 	    clock_t end = clock();
 	    printf("%f tag0 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
 	#endif
-            tgt_offset->data[0]=0.1;
+            tgt_offset->data[0]=0;
+            tgt_offset->data[1]=0.2;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
             sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
@@ -136,13 +137,14 @@ static void process_image(void *p, int size)
             break;
         } else if (det->id == 1) {
             det_info.det = det;
-            det_info.tagsize = 0.041;
+            det_info.tagsize = 0.072;
             estimate_tag_pose(&det_info, &pose);
 	#if SPEED_TEST
 	    clock_t end = clock();
 	    printf("%f tag1 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
 	#endif
-            tgt_offset->data[0]=-0.1;
+            tgt_offset->data[0]=0;
+            tgt_offset->data[1]=-0.25;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
             sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
@@ -151,18 +153,48 @@ static void process_image(void *p, int size)
             matd_destroy(pose.t);
             matd_destroy(pose.R);
             break;
-#if 0
         } else if (det->id == 2) {
             det_info.det = det;
-            det_info.tagsize = 0.077;
+            det_info.tagsize = 0.05;
             estimate_tag_pose(&det_info, &pose);
-            pose.t->data[0]-0.2;
-            //printf("%f %f %f\n", pose.t->data[0], pose.t->data[1], pose.t->data[2]);
-            sendto(ipc_fd, pose.t->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            tgt_offset->data[0]=0;
+            tgt_offset->data[1]=-0.1;
+            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+            matd_t* m2 = matd_add(m1, pose.t);
+            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            matd_destroy(m1);
+            matd_destroy(m2);
             matd_destroy(pose.t);
             matd_destroy(pose.R);
             break;
-#endif
+        } else if (det->id == 3) {
+            det_info.det = det;
+            det_info.tagsize = 0.05;
+            estimate_tag_pose(&det_info, &pose);
+            tgt_offset->data[0]=-0.2;
+            tgt_offset->data[1]=0;
+            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+            matd_t* m2 = matd_add(m1, pose.t);
+            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            matd_destroy(m1);
+            matd_destroy(m2);
+            matd_destroy(pose.t);
+            matd_destroy(pose.R);
+            break;
+        } else if (det->id == 4) {
+            det_info.det = det;
+            det_info.tagsize = 0.05;
+            estimate_tag_pose(&det_info, &pose);
+            tgt_offset->data[0]=0.2;
+            tgt_offset->data[1]=0;
+            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+            matd_t* m2 = matd_add(m1, pose.t);
+            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            matd_destroy(m1);
+            matd_destroy(m2);
+            matd_destroy(pose.t);
+            matd_destroy(pose.R);
+            break;
         }
     }
     #if SPEED_TEST
