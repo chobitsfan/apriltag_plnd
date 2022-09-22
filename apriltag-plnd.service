@@ -1,0 +1,12 @@
+[Unit]
+Description=apriltag precision landing
+Wants=multi-user.target
+After=multi-user.target
+
+[Service]
+Type=simple 
+ExecStart=/home/pi/src/apriltag_plnd/apriltag_plnd
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
