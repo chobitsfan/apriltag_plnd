@@ -33,9 +33,9 @@
 #include <apriltag/tagStandard41h12.h>
 #include <time.h>
 #include <signal.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#include <math.h>
+#include <termios.h> // Contains POSIX terminal control definitions
+#include "mavlink/ardupilotmega/mavlink.h"
 
 #define CAM_RES_W 1280
 #define CAM_RES_H 720
@@ -69,10 +69,8 @@ apriltag_family_t *tf;
 apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
 matd_t* tgt_offset;
 
-int ipc_fd;
-struct sockaddr_in server;
-
 bool gogogo = true;
+int uart_fd;
 
 void sig_handler(int signum) {
     gogogo = false;
@@ -93,6 +91,18 @@ static int xioctl(int fh, int request, void *arg)
     } while (-1 == r && EINTR == errno);
 
     return r;
+}
+
+static void send_landing_tgt(double f, double r, double d) {
+    unsigned char buf[512];
+    int len;
+    float q[4] = {1, 0, 0, 0};
+    struct timespec ts;
+    mavlink_message_t msg;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    mavlink_msg_landing_target_pack(255, 0, &msg, ts.tv_sec*1000000+(uint64_t)(ts.tv_nsec*0.001), 0, 12, 0, 0, sqrt(f*f+r*r+d*d), 0, 0, f, r, d, q, 0, 1);
+    len = mavlink_msg_to_send_buffer(buf, &msg);
+    write(uart_fd, buf, len);
 }
 
 static void process_image(void *p, int size)
@@ -129,7 +139,8 @@ static void process_image(void *p, int size)
             tgt_offset->data[1]=0.2;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            //sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            send_landing_tgt(-(m2->data[1]), m2->data[0], m2->data[2]);
             matd_destroy(m1);
             matd_destroy(m2);
             matd_destroy(pose.t);
@@ -147,7 +158,8 @@ static void process_image(void *p, int size)
             tgt_offset->data[1]=-0.25;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            //sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            send_landing_tgt(-(m2->data[1]), m2->data[0], m2->data[2]);
             matd_destroy(m1);
             matd_destroy(m2);
             matd_destroy(pose.t);
@@ -161,7 +173,8 @@ static void process_image(void *p, int size)
             tgt_offset->data[1]=-0.1;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            //sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            send_landing_tgt(-(m2->data[1]), m2->data[0], m2->data[2]);
             matd_destroy(m1);
             matd_destroy(m2);
             matd_destroy(pose.t);
@@ -175,7 +188,8 @@ static void process_image(void *p, int size)
             tgt_offset->data[1]=0;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            //sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            send_landing_tgt(-(m2->data[1]), m2->data[0], m2->data[2]);
             matd_destroy(m1);
             matd_destroy(m2);
             matd_destroy(pose.t);
@@ -189,7 +203,8 @@ static void process_image(void *p, int size)
             tgt_offset->data[1]=0;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            //sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            send_landing_tgt(-(m2->data[1]), m2->data[0], m2->data[2]);
             matd_destroy(m1);
             matd_destroy(m2);
             matd_destroy(pose.t);
@@ -551,7 +566,7 @@ static void init_userp(unsigned int buffer_size)
 
 void print_v4l2_fourcc(unsigned int fourcc)
 {
-	char buf[5];
+	char buf[10];
 	buf[0] = fourcc & 0x7f;
 	buf[1] = (fourcc >> 8) & 0x7f;
 	buf[2] = (fourcc >> 16) & 0x7f;
@@ -753,10 +768,47 @@ long_options[] = {
 
 int main(int argc, char **argv)
 {
+    struct termios tty;
+
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
     //system("v4l2-ctl -p 10");
+
+    uart_fd = open("/dev/serial0", O_RDWR | O_NONBLOCK);
+    if (uart_fd < 0) {
+        printf("can not open serial port\n");
+        return 1;
+    }
+
+    if(tcgetattr(uart_fd, &tty) != 0) {
+        printf("Error %i from tcgetattr: %s\n", errno, strerror(errno));
+        return 1;
+    }
+    tty.c_cflag &= ~PARENB; // Clear parity bit, disabling parity (most common)
+    tty.c_cflag &= ~CSTOPB; // Clear stop field, only one stop bit used in communication (most common)
+    tty.c_cflag &= ~CSIZE; // Clear all bits that set the data size 
+    tty.c_cflag |= CS8; // 8 bits per byte (most common)
+    tty.c_cflag &= ~CRTSCTS; // Disable RTS/CTS hardware flow control (most common)
+    tty.c_cflag |= CREAD | CLOCAL; // Turn on READ & ignore ctrl lines (CLOCAL = 1)
+    tty.c_lflag &= ~ICANON;
+    tty.c_lflag &= ~ECHO; // Disable echo
+    tty.c_lflag &= ~ECHOE; // Disable erasure
+    tty.c_lflag &= ~ECHONL; // Disable new-line echo
+    tty.c_lflag &= ~ISIG; // Disable interpretation of INTR, QUIT and SUSP
+    tty.c_iflag &= ~(IXON | IXOFF | IXANY); // Turn off s/w flow ctrl
+    tty.c_iflag &= ~(IGNBRK|BRKINT|PARMRK|ISTRIP|INLCR|IGNCR|ICRNL); // Disable any special handling of received bytes
+    tty.c_oflag &= ~OPOST; // Prevent special interpretation of output bytes (e.g. newline chars)
+    tty.c_oflag &= ~ONLCR; // Prevent conversion of newline to carriage return/line feed
+    tty.c_cc[VTIME] = 10;    // Wait for up to 1s (10 deciseconds), returning as soon as any data is received.
+    tty.c_cc[VMIN] = 0;
+    cfsetispeed(&tty, B921600);
+    cfsetospeed(&tty, B921600);
+    // Save tty settings, also checking for error
+    if (tcsetattr(uart_fd, TCSANOW, &tty) != 0) {
+        printf("Error %i from tcsetattr: %s\n", errno, strerror(errno));
+        return 1;
+    }
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
@@ -767,15 +819,6 @@ int main(int argc, char **argv)
     tgt_offset->data[0]=0;
     tgt_offset->data[1]=0;
     tgt_offset->data[2]=0;
-
-    if ((ipc_fd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
-        return 1;
-    }
-    memset(&server, 0, sizeof(server));
-    /* Set up the server name */
-    server.sin_family      = AF_INET;            /* Internet Domain    */
-    server.sin_port        = htons(17510);  //Server Port
-    server.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     dev_name = "/dev/video0";
 
@@ -844,7 +887,6 @@ int main(int argc, char **argv)
     tagStandard41h12_destroy(tf);
     apriltag_detector_destroy(td);
     matd_destroy(tgt_offset);
-    close(ipc_fd);
     fprintf(stderr, "\n");
     return 0;
 }

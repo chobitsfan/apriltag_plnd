@@ -1,1 +1,1 @@
-gcc -O1 -Wall -o apriltag_plnd capture.c -lapriltag -lm
+gcc -Wno-address-of-packed-member -O2 -o apriltag_plnd capture.c -lapriltag -lm
