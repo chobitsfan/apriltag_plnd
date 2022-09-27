@@ -551,7 +551,7 @@ static void init_userp(unsigned int buffer_size)
 
 void print_v4l2_fourcc(unsigned int fourcc)
 {
-	char buf[5];
+	char buf[8];
 	buf[0] = fourcc & 0x7f;
 	buf[1] = (fourcc >> 8) & 0x7f;
 	buf[2] = (fourcc >> 16) & 0x7f;
