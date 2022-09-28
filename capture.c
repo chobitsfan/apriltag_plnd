@@ -104,6 +104,7 @@ static void process_image(void *p, int size)
     //fflush(stderr);
     //printf("%d\n", size);
 
+    double ipc_data[5];
     image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
     apriltag_pose_t pose;
 #if SPEED_TEST
@@ -125,11 +126,18 @@ static void process_image(void *p, int size)
 	    clock_t end = clock();
 	    printf("%f tag0 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
 	#endif
+            //pose.R is a 3x3 matrix
+            //printf("%f\n", atan2(pose.R->data[3], pose.R->data[0])*(180/M_PI));
             tgt_offset->data[0]=0;
             tgt_offset->data[1]=0.2;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
             matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
+            ipc_data[0] = m2->data[0];
+            ipc_data[1] = m2->data[1];
+            ipc_data[2] = m2->data[2];
+            ipc_data[3] = pose.R->data[3]; // I only need these 2 elements to compute yaw
+            ipc_data[4] = pose.R->data[0];
+            sendto(ipc_fd, ipc_data, sizeof(ipc_data), 0, (const struct sockaddr *)&server, sizeof(server));
             matd_destroy(m1);
             matd_destroy(m2);
             matd_destroy(pose.t);
