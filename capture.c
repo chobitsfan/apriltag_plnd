@@ -95,6 +95,10 @@ static int xioctl(int fh, int request, void *arg)
     return r;
 }
 
+static double tag_sz[5] = {0.16, 0.072, 0.05, 0.05, 0.05};
+static double tgt_offset_x[5] = {0, 0, 0, -0.2, 0.2};
+static double tgt_offset_y[5] = {0.2, -0.25, -0.1, 0, 0};
+
 static void process_image(void *p, int size)
 {
     //if (out_buf) fwrite(p, size, 1, stdout);
@@ -104,7 +108,7 @@ static void process_image(void *p, int size)
     //fflush(stderr);
     //printf("%d\n", size);
 
-    double ipc_data[5];
+    double ipc_data[6];
     image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
     apriltag_pose_t pose;
 #if SPEED_TEST
@@ -119,13 +123,37 @@ static void process_image(void *p, int size)
         zarray_get(detections, i, &det);
 
         // Do stuff with detections here.
+        if (det->id > 4) continue;
+		det_info.det = det;
+		det_info.tagsize = tag_sz[det->id];
+		estimate_tag_pose(&det_info, &pose);
+		tgt_offset->data[0]=tgt_offset_x[det->id];
+		tgt_offset->data[1]=tgt_offset_y[det->id];
+		matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+		matd_t* m2 = matd_add(m1, pose.t);
+		ipc_data[0] = m2->data[0];
+		ipc_data[1] = m2->data[1];
+		ipc_data[2] = m2->data[2];
         if (det->id == 0) {
+			ipc_data[3] = pose.R->data[3]; // I only need these 2 elements to compute yaw
+			ipc_data[4] = pose.R->data[0];
+        } else {
+            ipc_data[3] = ipc_data[4] = 0;
+        }
+        ipc_data[5] = det->id;
+        sendto(ipc_fd, ipc_data, sizeof(ipc_data), 0, (const struct sockaddr *)&server, sizeof(server));
+		matd_destroy(m1);
+		matd_destroy(m2);
+		matd_destroy(pose.t);
+		matd_destroy(pose.R);
+		break;
+        /*if (det->id == 0) {
             det_info.det = det;
             det_info.tagsize = 0.16;
             estimate_tag_pose(&det_info, &pose);
 	#if SPEED_TEST
             clock_gettime(CLOCK_MONOTONIC, &stop);
-	    printf("%d tag0 %f %f %f\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6), pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+			printf("%d tag0 %f %f %f\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6), pose.t->data[0], pose.t->data[1], pose.t->data[2]);
 	#endif
             //pose.R is a 3x3 matrix
             //printf("%f\n", atan2(pose.R->data[3], pose.R->data[0])*(180/M_PI));
@@ -200,7 +228,7 @@ static void process_image(void *p, int size)
             matd_destroy(pose.t);
             matd_destroy(pose.R);
             break;
-        }
+        }*/
     }
     #if SPEED_TEST
     if (zarray_size(detections) == 0) {
