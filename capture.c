@@ -108,7 +108,8 @@ static void process_image(void *p, int size)
     image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
     apriltag_pose_t pose;
 #if SPEED_TEST
-    clock_t begin = clock();
+    struct timespec start, stop;
+    clock_gettime(CLOCK_MONOTONIC, &start);
 #endif
     zarray_t *detections = apriltag_detector_detect(td, &img_header);
     //clock_t end = clock();
@@ -123,8 +124,8 @@ static void process_image(void *p, int size)
             det_info.tagsize = 0.16;
             estimate_tag_pose(&det_info, &pose);
 	#if SPEED_TEST
-	    clock_t end = clock();
-	    printf("%f tag0 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
+            clock_gettime(CLOCK_MONOTONIC, &stop);
+	    printf("%d tag0 %f %f %f\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6), pose.t->data[0], pose.t->data[1], pose.t->data[2]);
 	#endif
             //pose.R is a 3x3 matrix
             //printf("%f\n", atan2(pose.R->data[3], pose.R->data[0])*(180/M_PI));
@@ -147,10 +148,6 @@ static void process_image(void *p, int size)
             det_info.det = det;
             det_info.tagsize = 0.072;
             estimate_tag_pose(&det_info, &pose);
-	#if SPEED_TEST
-	    clock_t end = clock();
-	    printf("%f tag1 %f %f %f\n", (float)(end - begin) / CLOCKS_PER_SEC, pose.t->data[0], pose.t->data[1], pose.t->data[2]);
-	#endif
             tgt_offset->data[0]=0;
             tgt_offset->data[1]=-0.25;
             matd_t* m1 = matd_multiply(pose.R, tgt_offset);
@@ -207,8 +204,8 @@ static void process_image(void *p, int size)
     }
     #if SPEED_TEST
     if (zarray_size(detections) == 0) {
-	    clock_t end = clock();
-	    printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
+            clock_gettime(CLOCK_MONOTONIC, &stop);
+	    printf("%d\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6));
     }
     #endif
     apriltag_detections_destroy(detections);
@@ -764,12 +761,12 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    //system("v4l2-ctl -p 10");
+    //system("v4l2-ctl -p 20");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
-    td->quad_decimate = 4;
+    td->quad_decimate = 3;
     td->nthreads = 4;
     tgt_offset = matd_create(3, 1);
     tgt_offset->data[0]=0;
