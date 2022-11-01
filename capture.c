@@ -95,9 +95,9 @@ static int xioctl(int fh, int request, void *arg)
     return r;
 }
 
-static double tag_sz[5] = {0.16, 0.072, 0.05, 0.05, 0.05};
-static double tgt_offset_x[5] = {0, 0, 0, -0.2, 0.2};
-static double tgt_offset_y[5] = {0.2, -0.25, -0.1, 0, 0};
+static double tag_sz[] = {0.16, 0.113, 0.05, 0.05, 0.05, 0.113};
+static double tgt_offset_x[] = {0, 0.2, 0, -0.2, 0.2, -0.2};
+static double tgt_offset_y[] = {0.2, -0.25, -0.1, 0, 0, -0.25};
 
 static void process_image(void *p, int size)
 {
@@ -123,7 +123,7 @@ static void process_image(void *p, int size)
         zarray_get(detections, i, &det);
 
         // Do stuff with detections here.
-        if (det->id > 4) continue;
+        if (det->id > 5) continue;
 		det_info.det = det;
 		det_info.tagsize = tag_sz[det->id];
 		estimate_tag_pose(&det_info, &pose);
