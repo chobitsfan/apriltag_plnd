@@ -43,6 +43,7 @@
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
 #define SPEED_TEST 0
+#define MARKERS_COUNT 6
 
 enum io_method {
     IO_METHOD_READ,
@@ -95,9 +96,9 @@ static int xioctl(int fh, int request, void *arg)
     return r;
 }
 
-static double tag_sz[] = {0.16, 0.113, 0.05, 0.05, 0.05, 0.113};
-static double tgt_offset_x[] = {0, 0.2, 0, -0.2, 0.2, -0.2};
-static double tgt_offset_y[] = {0.2, -0.25, -0.1, 0, 0, -0.25};
+static double tag_sz[MARKERS_COUNT] = {0.16, 0.113, 0.05, 0.05, 0.05, 0.113};
+static double tgt_offset_x[MARKERS_COUNT] = {0, 0.2, 0, -0.2, 0.2, -0.2};
+static double tgt_offset_y[MARKERS_COUNT] = {0.2, -0.25, -0.1, 0, 0, -0.25};
 
 static void process_image(void *p, int size)
 {
@@ -118,121 +119,39 @@ static void process_image(void *p, int size)
     zarray_t *detections = apriltag_detector_detect(td, &img_header);
     //clock_t end = clock();
     //printf("%f\n", (float)(end - begin) / CLOCKS_PER_SEC);
-    for (int i = 0; i < zarray_size(detections); i++) {
+    if (zarray_size(detections) > 0) {
         apriltag_detection_t *det;
-        zarray_get(detections, i, &det);
+        zarray_get(detections, 0, &det);
 
         // Do stuff with detections here.
-        if (det->id > 5) continue;
-		det_info.det = det;
-		det_info.tagsize = tag_sz[det->id];
-		estimate_tag_pose(&det_info, &pose);
-		tgt_offset->data[0]=tgt_offset_x[det->id];
-		tgt_offset->data[1]=tgt_offset_y[det->id];
-		matd_t* m1 = matd_multiply(pose.R, tgt_offset);
-		matd_t* m2 = matd_add(m1, pose.t);
-		ipc_data[0] = m2->data[0];
-		ipc_data[1] = m2->data[1];
-		ipc_data[2] = m2->data[2];
-        if (det->id == 0) {
-			ipc_data[3] = pose.R->data[3]; // I only need these 2 elements to compute yaw
-			ipc_data[4] = pose.R->data[0];
-        } else {
-            ipc_data[3] = ipc_data[4] = 0;
+        if (det->id < MARKERS_COUNT) {
+			det_info.det = det;
+			det_info.tagsize = tag_sz[det->id];
+			estimate_tag_pose(&det_info, &pose);
+			tgt_offset->data[0]=tgt_offset_x[det->id];
+			tgt_offset->data[1]=tgt_offset_y[det->id];
+			matd_t* m1 = matd_multiply(pose.R, tgt_offset);
+			matd_t* m2 = matd_add(m1, pose.t);
+			ipc_data[0] = m2->data[0];
+			ipc_data[1] = m2->data[1];
+			ipc_data[2] = m2->data[2];
+			if (det->id == 0) {
+				ipc_data[3] = pose.R->data[3]; // I only need these 2 elements to compute yaw
+				ipc_data[4] = pose.R->data[0];
+			} else {
+				ipc_data[3] = ipc_data[4] = 0;
+			}
+			ipc_data[5] = det->id;
+			sendto(ipc_fd, ipc_data, sizeof(ipc_data), 0, (const struct sockaddr *)&server, sizeof(server));
+			matd_destroy(m1);
+			matd_destroy(m2);
+			matd_destroy(pose.t);
+			matd_destroy(pose.R);
         }
-        ipc_data[5] = det->id;
-        sendto(ipc_fd, ipc_data, sizeof(ipc_data), 0, (const struct sockaddr *)&server, sizeof(server));
-		matd_destroy(m1);
-		matd_destroy(m2);
-		matd_destroy(pose.t);
-		matd_destroy(pose.R);
-		break;
-        /*if (det->id == 0) {
-            det_info.det = det;
-            det_info.tagsize = 0.16;
-            estimate_tag_pose(&det_info, &pose);
-	#if SPEED_TEST
-            clock_gettime(CLOCK_MONOTONIC, &stop);
-			printf("%d tag0 %f %f %f\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6), pose.t->data[0], pose.t->data[1], pose.t->data[2]);
-	#endif
-            //pose.R is a 3x3 matrix
-            //printf("%f\n", atan2(pose.R->data[3], pose.R->data[0])*(180/M_PI));
-            tgt_offset->data[0]=0;
-            tgt_offset->data[1]=0.2;
-            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
-            matd_t* m2 = matd_add(m1, pose.t);
-            ipc_data[0] = m2->data[0];
-            ipc_data[1] = m2->data[1];
-            ipc_data[2] = m2->data[2];
-            ipc_data[3] = pose.R->data[3]; // I only need these 2 elements to compute yaw
-            ipc_data[4] = pose.R->data[0];
-            sendto(ipc_fd, ipc_data, sizeof(ipc_data), 0, (const struct sockaddr *)&server, sizeof(server));
-            matd_destroy(m1);
-            matd_destroy(m2);
-            matd_destroy(pose.t);
-            matd_destroy(pose.R);
-            break;
-        } else if (det->id == 1) {
-            det_info.det = det;
-            det_info.tagsize = 0.072;
-            estimate_tag_pose(&det_info, &pose);
-            tgt_offset->data[0]=0;
-            tgt_offset->data[1]=-0.25;
-            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
-            matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
-            matd_destroy(m1);
-            matd_destroy(m2);
-            matd_destroy(pose.t);
-            matd_destroy(pose.R);
-            break;
-        } else if (det->id == 2) {
-            det_info.det = det;
-            det_info.tagsize = 0.05;
-            estimate_tag_pose(&det_info, &pose);
-            tgt_offset->data[0]=0;
-            tgt_offset->data[1]=-0.1;
-            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
-            matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
-            matd_destroy(m1);
-            matd_destroy(m2);
-            matd_destroy(pose.t);
-            matd_destroy(pose.R);
-            break;
-        } else if (det->id == 3) {
-            det_info.det = det;
-            det_info.tagsize = 0.05;
-            estimate_tag_pose(&det_info, &pose);
-            tgt_offset->data[0]=-0.2;
-            tgt_offset->data[1]=0;
-            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
-            matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
-            matd_destroy(m1);
-            matd_destroy(m2);
-            matd_destroy(pose.t);
-            matd_destroy(pose.R);
-            break;
-        } else if (det->id == 4) {
-            det_info.det = det;
-            det_info.tagsize = 0.05;
-            estimate_tag_pose(&det_info, &pose);
-            tgt_offset->data[0]=0.2;
-            tgt_offset->data[1]=0;
-            matd_t* m1 = matd_multiply(pose.R, tgt_offset);
-            matd_t* m2 = matd_add(m1, pose.t);
-            sendto(ipc_fd, m2->data, sizeof(double)*3, 0, (const struct sockaddr *)&server, sizeof(server));
-            matd_destroy(m1);
-            matd_destroy(m2);
-            matd_destroy(pose.t);
-            matd_destroy(pose.R);
-            break;
-        }*/
     }
     #if SPEED_TEST
     if (zarray_size(detections) == 0) {
-            clock_gettime(CLOCK_MONOTONIC, &stop);
+        clock_gettime(CLOCK_MONOTONIC, &stop);
 	    printf("%d\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6));
     }
     #endif
