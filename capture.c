@@ -43,7 +43,13 @@
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
 #define SPEED_TEST 0
+
+#define MY_TEST_BOARD
+#ifdef MY_TEST_BOARD
 #define MARKERS_COUNT 6
+#else
+#define MARKERS_COUNT 9
+#endif
 
 enum io_method {
     IO_METHOD_READ,
@@ -96,9 +102,15 @@ static int xioctl(int fh, int request, void *arg)
     return r;
 }
 
-static double tag_sz[MARKERS_COUNT] = {0.16, 0.113, 0.05, 0.05, 0.05, 0.113};
+#ifdef MY_TEST_BOARD
+static double tag_sz[MARKERS_COUNT] = {0.161, 0.113, 0.05, 0.05, 0.05, 0.113};
 static double tgt_offset_x[MARKERS_COUNT] = {0, 0.2, 0, -0.2, 0.2, -0.2};
 static double tgt_offset_y[MARKERS_COUNT] = {0.2, -0.25, -0.1, 0, 0, -0.25};
+#else
+static double tag_sz[MARKERS_COUNT] = {0.161, 0.161, 0.161, 0.161, 0.161, 0.113, 0.113, 0.113, 0.076};
+static double tgt_offset_x[MARKERS_COUNT] = {0.41, 0, 0, 0, 0, 0, -0.48, 0, 0};
+static double tgt_offset_y[MARKERS_COUNT] = {0, 0, 0, 0, 0, -0.37, 0, 0.37, 0};
+#endif
 
 static void process_image(void *p, int size)
 {
@@ -147,6 +159,8 @@ static void process_image(void *p, int size)
 			matd_destroy(m2);
 			matd_destroy(pose.t);
 			matd_destroy(pose.R);
+        } else {
+            printf("tag id %d found ?!\n", det->id);
         }
     }
     #if SPEED_TEST
