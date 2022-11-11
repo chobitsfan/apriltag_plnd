@@ -44,11 +44,15 @@
 
 #define SPEED_TEST 0
 
-#define MY_TEST_BOARD
+#define AMR_2
 #ifdef MY_TEST_BOARD
 #define MARKERS_COUNT 6
-#else
+#endif
+#ifdef AMR_1
 #define MARKERS_COUNT 9
+#endif
+#ifdef AMR_2
+#define MARKERS_COUNT 6
 #endif
 
 enum io_method {
@@ -106,10 +110,16 @@ static int xioctl(int fh, int request, void *arg)
 static double tag_sz[MARKERS_COUNT] = {0.161, 0.113, 0.05, 0.05, 0.05, 0.113};
 static double tgt_offset_x[MARKERS_COUNT] = {0, 0.2, 0, -0.2, 0.2, -0.2};
 static double tgt_offset_y[MARKERS_COUNT] = {0.2, -0.25, -0.1, 0, 0, -0.25};
-#else
+#endif
+#ifdef AMR_1
 static double tag_sz[MARKERS_COUNT] = {0.161, 0.161, 0.161, 0.161, 0.161, 0.113, 0.113, 0.113, 0.076};
 static double tgt_offset_x[MARKERS_COUNT] = {0.41, 0, 0, 0, 0, 0, -0.48, 0, 0};
 static double tgt_offset_y[MARKERS_COUNT] = {0, 0, 0, 0, 0, -0.37, 0, 0.37, 0};
+#endif
+#ifdef AMR_2
+static double tag_sz[MARKERS_COUNT] = {0.161, 0.113, 0.113, 0.076, 0.076, 0.039};
+static double tgt_offset_x[MARKERS_COUNT] = {0.23, -0.17, 0.25, 0, -0.2, 0};
+static double tgt_offset_y[MARKERS_COUNT] = {0.12, 0.12, -0.39, -0.13, -0.39, 0};
 #endif
 
 static void process_image(void *p, int size)
