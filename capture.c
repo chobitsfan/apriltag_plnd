@@ -52,7 +52,7 @@
 #define MARKERS_COUNT 9
 #endif
 #ifdef AMR_2
-#define MARKERS_COUNT 6
+#define MARKERS_COUNT 9
 #endif
 
 enum io_method {
@@ -117,9 +117,9 @@ static double tgt_offset_x[MARKERS_COUNT] = {0.41, 0, 0, 0, 0, 0, -0.48, 0, 0};
 static double tgt_offset_y[MARKERS_COUNT] = {0, 0, 0, 0, 0, -0.37, 0, 0.37, 0};
 #endif
 #ifdef AMR_2
-static double tag_sz[MARKERS_COUNT] = {0.161, 0.113, 0.113, 0.076, 0.076, 0.039};
-static double tgt_offset_x[MARKERS_COUNT] = {0.23, -0.17, 0.25, 0, -0.2, 0};
-static double tgt_offset_y[MARKERS_COUNT] = {0.12, 0.12, -0.39, -0.13, -0.39, 0};
+static double tag_sz[MARKERS_COUNT] = {0.161, 0.113, 0.113, 0.054, 0.076, 0.038, 0.054, 0.038, 0.038};
+static double tgt_offset_x[MARKERS_COUNT] = {0.23, -0.17, 0.25, 0.23, -0.2, 0, -0.23, 0, 0};
+static double tgt_offset_y[MARKERS_COUNT] = {0.27, 0.27, -0.24, 0, -0.24, 0, 0, 0.3, -0.25};
 #endif
 
 static void process_image(void *p, int size)
