@@ -737,7 +737,7 @@ int main(int argc, char **argv)
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
     apriltag_detector_add_family(td, tf);
-    td->quad_decimate = 3;
+    td->quad_decimate = 2;
     td->nthreads = 4;
     tgt_offset = matd_create(3, 1);
     tgt_offset->data[0]=0;
