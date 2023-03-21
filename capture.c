@@ -37,14 +37,20 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define CAM_RES_W 1280
-#define CAM_RES_H 720
+#define CAM_RES_W 640
+#define CAM_RES_H 480
+//#define CAM_RES_W 1280
+//#define CAM_RES_H 720
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
 #define SPEED_TEST 0
 
-#define AMR_2
+#define MY_TEST_BOARD
+
+#ifdef TEST_0
+#define MARKERS_COUNT 1
+#endif
 #ifdef MY_TEST_BOARD
 #define MARKERS_COUNT 6
 #endif
@@ -77,7 +83,8 @@ static int              frame_count = 70;
 
 apriltag_detector_t *td;
 apriltag_family_t *tf;
-apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
+apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 496.25399994435088, .fy = 496.25399994435088, .cx = 320, .cy = 240};
+//apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
 matd_t* tgt_offset;
 
 int ipc_fd;
@@ -106,6 +113,11 @@ static int xioctl(int fh, int request, void *arg)
     return r;
 }
 
+#ifdef TEST_0
+static double tag_sz[MARKERS_COUNT] = {0.113};
+static double tgt_offset_x[MARKERS_COUNT] = {0};
+static double tgt_offset_y[MARKERS_COUNT] = {0};
+#endif
 #ifdef MY_TEST_BOARD
 static double tag_sz[MARKERS_COUNT] = {0.161, 0.113, 0.05, 0.05, 0.05, 0.113};
 static double tgt_offset_x[MARKERS_COUNT] = {0, 0.2, 0, -0.2, 0.2, -0.2};
@@ -154,6 +166,7 @@ static void process_image(void *p, int size)
 			tgt_offset->data[1]=tgt_offset_y[det->id];
 			matd_t* m1 = matd_multiply(pose.R, tgt_offset);
 			matd_t* m2 = matd_add(m1, pose.t);
+            //printf("tag id %d : %f %f %f\n", det->id, m2->data[0], m2->data[1], m2->data[2]);
 			ipc_data[0] = m2->data[0];
 			ipc_data[1] = m2->data[1];
 			ipc_data[2] = m2->data[2];
@@ -174,10 +187,8 @@ static void process_image(void *p, int size)
         }
     }
     #if SPEED_TEST
-    if (zarray_size(detections) == 0) {
-        clock_gettime(CLOCK_MONOTONIC, &stop);
-	    printf("%d\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6));
-    }
+    clock_gettime(CLOCK_MONOTONIC, &stop);
+	printf("%d ms\n", (int)((stop.tv_sec-start.tv_sec)*1000+(stop.tv_nsec-start.tv_nsec)*1e-6));
     #endif
     apriltag_detections_destroy(detections);
 }
@@ -732,7 +743,7 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    //system("v4l2-ctl -p 20");
+    system("v4l2-ctl -p 20");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
