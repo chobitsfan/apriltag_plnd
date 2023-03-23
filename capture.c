@@ -37,17 +37,9 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#ifdef H_RES
-#define CAM_RES_W 1280 //max range for a3 marker 13m
-#define CAM_RES_H 960
-#else
-#define CAM_RES_W 640 //max range for a3 marker 7.5m
-#define CAM_RES_H 480
-#endif
-
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
-#define SPEED_TEST 1
+#define SPEED_TEST 0
 
 #define MY_TEST_BOARD
 
@@ -86,17 +78,18 @@ static int              frame_count = 70;
 
 apriltag_detector_t *td;
 apriltag_family_t *tf;
-#ifdef H_RES
 apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 1032.4642491582222, .fy = 1032.4642491582222, .cx = 640, .cy = 480};
-#else
-apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 496.25399994435088, .fy = 496.25399994435088, .cx = 320, .cy = 240};
-#endif
 matd_t* tgt_offset;
 
 int ipc_fd;
 struct sockaddr_in server;
 
 bool gogogo = true;
+static bool restart = false;
+static int cam_w = 1280;
+static int cam_h = 960;
+static int cam_fps = 10;
+static bool use_h_res = true;
 
 void sig_handler(int signum) {
     gogogo = false;
@@ -150,7 +143,7 @@ static void process_image(void *p, int size)
     //printf("%d\n", size);
 
     double ipc_data[6];
-    image_u8_t img_header = { .width=CAM_RES_W, .height=CAM_RES_H, .stride=CAM_RES_W, .buf=p };
+    image_u8_t img_header = { .width=cam_w, .height=cam_h, .stride=cam_w, .buf=p };
     apriltag_pose_t pose;
 #if SPEED_TEST
     struct timespec start, stop;
@@ -184,6 +177,20 @@ static void process_image(void *p, int size)
 			}
 			ipc_data[5] = det->id;
 			sendto(ipc_fd, ipc_data, sizeof(ipc_data), 0, (const struct sockaddr *)&server, sizeof(server));
+
+			if (use_h_res && (pose.t->data[2] < 2)) {
+            	use_h_res = false;
+                gogogo = false;
+                restart = true;
+                det_info.fx = 496.25399994435088;
+                det_info.fy = 496.25399994435088;
+                det_info.cx = 320;
+                det_info.cy = 240;
+				cam_w = 640;
+                cam_h = 480;
+                cam_fps = 25;
+            }
+
 			matd_destroy(m1);
 			matd_destroy(m2);
 			matd_destroy(pose.t);
@@ -251,15 +258,15 @@ static int read_frame(void)
 	    buf2.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	    buf2.memory = V4L2_MEMORY_MMAP;
 	    if (-1 == xioctl(fd, VIDIOC_DQBUF, &buf2)) {
-            	if (errno == EAGAIN) {
-	            assert(buf.index < n_buffers);
-	    	    process_image(buffers[buf.index].start, buf.bytesused);
-	            if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) errno_exit("VIDIOC_QBUF");
-                    return 0;
-                } else {
-		    errno_exit("VIDIOC_DQBUF");
-                }
-            }
+			if (errno == EAGAIN) {
+				assert(buf.index < n_buffers);
+				process_image(buffers[buf.index].start, buf.bytesused);
+				if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) errno_exit("VIDIOC_QBUF");
+				return 0;
+			} else {
+				errno_exit("VIDIOC_DQBUF");
+			}
+		}
 
 	    if (-1 == xioctl(fd, VIDIOC_QBUF, &buf)) errno_exit("VIDIOC_QBUF");
 	    assert(buf2.index < n_buffers);
@@ -452,7 +459,7 @@ static void init_mmap(void)
 
     CLEAR(req);
 
-    req.count = 3;
+    req.count = 4;
     req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     req.memory = V4L2_MEMORY_MMAP;
 
@@ -635,8 +642,8 @@ static void init_device(void)
 
     fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
     if (force_format) {
-	    fmt.fmt.pix.width       = CAM_RES_W;
-	    fmt.fmt.pix.height      = CAM_RES_H;
+	    fmt.fmt.pix.width       = cam_w;
+	    fmt.fmt.pix.height      = cam_h;
 	    fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUV420;
 	    fmt.fmt.pix.field       = V4L2_FIELD_NONE;
 
@@ -660,7 +667,7 @@ static void init_device(void)
     memset(&(param), 0, sizeof(param));
     param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	param.parm.capture.timeperframe.numerator = 1;
-	param.parm.capture.timeperframe.denominator = 20;
+	param.parm.capture.timeperframe.denominator = cam_fps;
     if (xioctl(fd, VIDIOC_S_PARM, &param) == -1) {
         errno_exit("VIDIOC_S_PARM");
     }
@@ -836,6 +843,9 @@ int main(int argc, char **argv)
 	    }
     }
 
+do {
+    gogogo = true;
+    restart = false;
     open_device();
     init_device();
     start_capturing();
@@ -843,6 +853,7 @@ int main(int argc, char **argv)
     stop_capturing();
     uninit_device();
     close_device();
+} while (restart);
     tagStandard41h12_destroy(tf);
     apriltag_detector_destroy(td);
     matd_destroy(tgt_offset);
