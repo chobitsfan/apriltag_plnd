@@ -7,6 +7,8 @@
 * see https://linuxtv.org/docs.php for more information
 */
 
+//modified from https://www.kernel.org/doc/html/v4.11/media/uapi/v4l/capture.c.html
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
