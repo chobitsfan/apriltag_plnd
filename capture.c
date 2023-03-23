@@ -37,14 +37,17 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
-#define CAM_RES_W 640
+#ifdef H_RES
+#define CAM_RES_W 1280 //max range for a3 marker 13m
+#define CAM_RES_H 960
+#else
+#define CAM_RES_W 640 //max range for a3 marker 7.5m
 #define CAM_RES_H 480
-//#define CAM_RES_W 1280
-//#define CAM_RES_H 720
+#endif
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
-#define SPEED_TEST 0
+#define SPEED_TEST 1
 
 #define MY_TEST_BOARD
 
@@ -83,8 +86,11 @@ static int              frame_count = 70;
 
 apriltag_detector_t *td;
 apriltag_family_t *tf;
+#ifdef H_RES
+apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 1032.4642491582222, .fy = 1032.4642491582222, .cx = 640, .cy = 480};
+#else
 apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 496.25399994435088, .fy = 496.25399994435088, .cx = 320, .cy = 240};
-//apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 978.0558315419056, .fy = 980.40099676993566, .cx = 644.32270873931213, .cy = 377.51661754419627};
+#endif
 matd_t* tgt_offset;
 
 int ipc_fd;
@@ -114,7 +120,7 @@ static int xioctl(int fh, int request, void *arg)
 }
 
 #ifdef TEST_0
-static double tag_sz[MARKERS_COUNT] = {0.113};
+static double tag_sz[MARKERS_COUNT] = {0.161};
 static double tgt_offset_x[MARKERS_COUNT] = {0};
 static double tgt_offset_y[MARKERS_COUNT] = {0};
 #endif
