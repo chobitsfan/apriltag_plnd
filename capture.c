@@ -566,6 +566,7 @@ static void init_device(void)
     struct v4l2_cropcap cropcap;
     struct v4l2_crop crop;
     struct v4l2_format fmt;
+    struct v4l2_streamparm param;
     unsigned int min;
 
     if (-1 == xioctl(fd, VIDIOC_QUERYCAP, &cap)) {
@@ -654,6 +655,14 @@ static void init_device(void)
     if (xioctl(fd, VIDIOC_G_FMT, &fmt) == 0) {
         printf("fmt %d %d\n", fmt.fmt.pix.width, fmt.fmt.pix.height);
 	print_v4l2_fourcc(fmt.fmt.pix.pixelformat);
+    }
+
+    memset(&(param), 0, sizeof(param));
+    param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	param.parm.capture.timeperframe.numerator = 1;
+	param.parm.capture.timeperframe.denominator = 20;
+    if (xioctl(fd, VIDIOC_S_PARM, &param) == -1) {
+        errno_exit("VIDIOC_S_PARM");
     }
 
     /* Buggy driver paranoia. */
@@ -749,7 +758,7 @@ int main(int argc, char **argv)
     signal(SIGINT, sig_handler);
     signal(SIGTERM, sig_handler);
 
-    system("v4l2-ctl -p 20");
+    //system("v4l2-ctl -p 20");
 
     td = apriltag_detector_create();
     tf = tagStandard41h12_create();
