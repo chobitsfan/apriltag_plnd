@@ -47,9 +47,9 @@
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
 
-#define SPEED_TEST 1
+#define SPEED_TEST 0
 
-#define MY_TEST_BOARD
+#define AMR_2
 
 #ifdef TEST_0
 #define MARKERS_COUNT 1
@@ -660,7 +660,7 @@ static void init_device(void)
     memset(&(param), 0, sizeof(param));
     param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	param.parm.capture.timeperframe.numerator = 1;
-	param.parm.capture.timeperframe.denominator = 20;
+	param.parm.capture.timeperframe.denominator = 30;
     if (xioctl(fd, VIDIOC_S_PARM, &param) == -1) {
         errno_exit("VIDIOC_S_PARM");
     }
