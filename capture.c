@@ -37,12 +37,20 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#define M_RES
+
 #ifdef H_RES
 #define CAM_RES_W 1280 //max range for a3 marker 13m
 #define CAM_RES_H 960
+#define CAM_FL 1032.4642491582222
+#elif defined(M_RES)
+#define CAM_RES_W 800
+#define CAM_RES_H 600
+#define CAM_FL 626.2560531862365
 #else
 #define CAM_RES_W 640 //max range for a3 marker 7.5m
 #define CAM_RES_H 480
+#define CAM_FL 496.25399994435088
 #endif
 
 #define CLEAR(x) memset(&(x), 0, sizeof(x))
@@ -86,11 +94,7 @@ static int              frame_count = 70;
 
 apriltag_detector_t *td;
 apriltag_family_t *tf;
-#ifdef H_RES
-apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 1032.4642491582222, .fy = 1032.4642491582222, .cx = 640, .cy = 480};
-#else
-apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = 496.25399994435088, .fy = 496.25399994435088, .cx = 320, .cy = 240};
-#endif
+apriltag_detection_info_t det_info = {.tagsize = 0.113, .fx = CAM_FL, .fy = CAM_FL, .cx = CAM_RES_W/2, .cy = CAM_RES_H/2};
 matd_t* tgt_offset;
 
 int ipc_fd;
@@ -660,7 +664,7 @@ static void init_device(void)
     memset(&(param), 0, sizeof(param));
     param.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	param.parm.capture.timeperframe.numerator = 1;
-	param.parm.capture.timeperframe.denominator = 30;
+	param.parm.capture.timeperframe.denominator = 25;
     if (xioctl(fd, VIDIOC_S_PARM, &param) == -1) {
         errno_exit("VIDIOC_S_PARM");
     }
